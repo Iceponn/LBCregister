@@ -110,13 +110,29 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- IMPORTANT ---
-        // REPLACE THIS WITH YOUR OWN LIFF ID from the LINE Developers Console
+        // This is your LIFF ID from the LINE Developers Console
         const LIFF_ID = "2007784462-Rkplq4Wm"; 
         
         // --- Firebase/App Configuration ---
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-liff-app';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // 1. IMPORTANT: PASTE YOUR FIREBASE CONFIG HERE
+        // Get this from your Firebase Project Settings > General > Your apps
+        const firebaseConfig = {
+         apiKey: "AIzaSyBogefmFSirOdlitAL0qgr0VB9ySCUEiiY",
+  authDomain: "icemenu.firebaseapp.com",
+  projectId: "icemenu",
+  storageBucket: "icemenu.appspot.com",
+  messagingSenderId: "836736913722",
+  appId: "1:836736913722:web:0f7230f8aab70687b20003",
+  measurementId: "G-HPTGNMZ1J5"
+        };
+        
+        // This is used to namespace your data in Firestore.
+        // You can change 'default-liff-app' to your app's name.
+        const appId = 'default-liff-app';
+        
+        // On GitHub, we will always sign in anonymously as __initial_auth_token won't exist.
+        const initialAuthToken = null; 
         
         // Firebase services
         let app;
@@ -275,7 +291,6 @@
             profileLineId.textContent = userData.lineUserId;
             
             profileView.classList.remove('hidden');
-            // Example of a profile page in a mobile app. <- This line was causing the error
             registrationView.classList.add('hidden');
             errorView.classList.add('hidden');
             hideLoader();
@@ -288,4 +303,6 @@
     </script>
 </body>
 </html>
+
+
 
