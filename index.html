@@ -189,10 +189,18 @@
                 }
                 await liff.init({ liffId: LIFF_ID });
 
+                // Check if we're in an external browser (like Canvas)
+                if (!liff.isInClient() && !liff.isLoggedIn()) {
+                    // In a normal browser, liff.login() would redirect.
+                    // In the Canvas iFrame, this redirect might be blocked and cause the app to hang.
+                    // So, we'll show an error message instead.
+                    throw new Error("Please open this app inside the LINE application.");
+                }
+
                 if (!liff.isLoggedIn()) {
-                    // Redirect to login if not logged in (optional, but good practice)
+                    // This will now only run if liff.isInClient() is true (inside LINE app)
                     liff.login();
-                    return;
+                    return; // Wait for redirect
                 }
 
                 // 4. Get LINE Profile
@@ -204,7 +212,21 @@
                 profileDocRef = doc(db, 'artifacts', appId, 'users', appUserId, 'liff_profile', 'data');
 
                 // 6. Check if user profile exists in Firestore
-                const docSnap = await getDoc(profileDocRef);
+                let docSnap;
+                try {
+                    docSnap = await getDoc(profileDocRef);
+                } catch (err) {
+                    // Check if the error is the "offline" error
+                    if (err.message.includes("offline") || err.code === 'unavailable') {
+                        console.warn("Firestore client offline. Retrying in 1 second...");
+                        // Wait 1 second for the connection to establish and retry
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        docSnap = await getDoc(profileDocRef);
+                    } else {
+                        // It was a different error, so re-throw it
+                        throw err;
+                    }
+                }
 
                 if (docSnap.exists()) {
                     // User is registered, show profile
@@ -303,6 +325,8 @@
     </script>
 </body>
 </html>
+
+
 
 
 
