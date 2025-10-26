@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIFF Profile Registration</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <style>
+        /* Custom styles for the loader */
+        .loader {
+            border-top-color: #3498db;
+            -webkit-animation: spin 1s linear infinite;
+            animation: spin 1s linear infinite;
+        }
+        @-webkit-keyframes spin {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-white rounded-lg shadow-xl p-6 transition-all">
+            
+            <!-- Header -->
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">User Profile</h1>
+                <p class="text-sm text-gray-500">LIFF & Firebase Demo</p>
+            </div>
+
+            <!-- Loader View -->
+            <div id="loader-view" class="text-center py-8">
+                <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mx-auto mb-4"></div>
+                <p class="text-gray-600">Loading your profile...</p>
+            </div>
+
+            <!-- Error View -->
+            <div id="error-view" class="hidden text-center py-8">
+                <p class="text-red-500 font-semibold" id="error-message"></p>
+            </div>
+
+            <!-- Registration View -->
+            <div id="registration-view" class="hidden">
+                <form id="registration-form">
+                    <p class="text-center text-gray-600 mb-4">Please register to continue.</p>
+                    <div class="mb-4">
+                        <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                        <input type="text" id="name" name="name" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                               placeholder="Your Full Name">
+                    </div>
+                    <div class="mb-6">
+                        <label for="mobile" class="block text-sm font-medium text-gray-700 mb-1">Mobile No.</label>
+                        <input type="tel" id="mobile" name="mobile" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                               placeholder="e.g., 0812345678">
+                    </div>
+                    <button type="submit" id="register-button"
+                            class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50">
+                        Register
+                    </button>
+                </form>
+            </div>
+
+            <!-- Profile View -->
+            <div id="profile-view" class="hidden">
+                <div class="space-y-4">
+                    <p class="text-center text-lg">Welcome back!</p>
+                    <div>
+                        <span class="block text-sm font-medium text-gray-500">Name</span>
+                        <p id="profile-name" class="text-lg font-semibold text-gray-800"></p>
+                    </div>
+                    <div>
+                        <span class="block text-sm font-medium text-gray-500">Mobile</span>
+                        <p id="profile-mobile" class="text-lg font-semibold text-gray-800"></p>
+                    </div>
+                    <div>
+                        <span class="block text-sm font-medium text-gray-500">LINE UserID</span>
+                        <p id="profile-line-id" class="text-xs text-gray-600 break-all"></p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Firebase and App Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc,
+            setLogLevel
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- IMPORTANT ---
+        // REPLACE THIS WITH YOUR OWN LIFF ID from the LINE Developers Console
+        const LIFF_ID = "2007784462-Rkplq4Wm"; 
+        
+        // --- Firebase/App Configuration ---
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-liff-app';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // Firebase services
+        let app;
+        let auth;
+        let db;
+
+        // DOM Elements
+        const loaderView = document.getElementById('loader-view');
+        const errorView = document.getElementById('error-view');
+        const errorMessage = document.getElementById('error-message');
+        const registrationView = document.getElementById('registration-view');
+        const profileView = document.getElementById('profile-view');
+        const registrationForm = document.getElementById('registration-form');
+        const registerButton = document.getElementById('register-button');
+        const nameInput = document.getElementById('name');
+        const mobileInput = document.getElementById('mobile');
+        const profileName = document.getElementById('profile-name');
+        const profileMobile = document.getElementById('profile-mobile');
+        const profileLineId = document.getElementById('profile-line-id');
+
+        // App State
+        let appUserId = null; // Firebase Auth User ID
+        let lineUserId = null; // LINE User ID
+        let profileDocRef = null;
+
+        /**
+         * Main function to initialize and run the app
+         */
+        async function main() {
+            try {
+                showLoader();
+                
+                // 1. Initialize Firebase
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                setLogLevel('Debug'); // Enable Firestore logging
+
+                // 2. Authenticate with Firebase
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                appUserId = auth.currentUser.uid;
+                
+                if (!appUserId) {
+                    throw new Error("Could not authenticate user.");
+                }
+
+                // 3. Initialize LIFF
+                if (LIFF_ID === "YOUR_LIFF_ID_GOES_HERE") {
+                    throw new Error("Please replace 'YOUR_LIFF_ID_GOES_HERE' with your LIFF ID.");
+                }
+                await liff.init({ liffId: LIFF_ID });
+
+                if (!liff.isLoggedIn()) {
+                    // Redirect to login if not logged in (optional, but good practice)
+                    liff.login();
+                    return;
+                }
+
+                // 4. Get LINE Profile
+                const lineProfile = await liff.getProfile();
+                lineUserId = lineProfile.userId;
+
+                // 5. Define Firestore document path
+                // We use the authenticated appUserId to store data, following security rules.
+                profileDocRef = doc(db, 'artifacts', appId, 'users', appUserId, 'liff_profile', 'data');
+
+                // 6. Check if user profile exists in Firestore
+                const docSnap = await getDoc(profileDocRef);
+
+                if (docSnap.exists()) {
+                    // User is registered, show profile
+                    showProfileView(docSnap.data());
+                } else {
+                    // User is not registered, show registration form
+                    showRegistrationView();
+                }
+
+            } catch (err) {
+                console.error("Initialization failed:", err);
+                showError(err.message || "An error occurred during initialization.");
+            } finally {
+                hideLoader();
+            }
+        }
+
+        /**
+         * Handles the registration form submission
+         */
+        async function handleRegistration(e) {
+            e.preventDefault();
+            if (!nameInput.value || !mobileInput.value) {
+                showError("Please fill out all fields.");
+                return;
+            }
+            
+            registerButton.disabled = true;
+            registerButton.textContent = "Registering...";
+
+            try {
+                const userData = {
+                    name: nameInput.value,
+                    mobile: mobileInput.value,
+                    lineUserId: lineUserId, // Store the LINE UserID
+                    registeredAt: new Date().toISOString()
+                };
+
+                // Save the data to Firestore
+                await setDoc(profileDocRef, userData);
+
+                // Show the newly created profile
+                showProfileView(userData);
+
+            } catch (err) {
+                console.error("Registration failed:", err);
+                showError(err.message || "Failed to register profile.");
+                registerButton.disabled = false;
+                registerButton.textContent = "Register";
+            }
+        }
+
+        // --- View-switching functions ---
+
+        function showLoader() {
+            loaderView.classList.remove('hidden');
+            errorView.classList.add('hidden');
+            registrationView.classList.add('hidden');
+            profileView.classList.add('hidden');
+        }
+
+        function hideLoader() {
+            loaderView.classList.add('hidden');
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorView.classList.remove('hidden');
+            registrationView.classList.add('hidden');
+            profileView.classList.add('hidden');
+            hideLoader();
+        }
+
+        function showRegistrationView() {
+            registrationView.classList.remove('hidden');
+            profileView.classList.add('hidden');
+            errorView.classList.add('hidden');
+            hideLoader();
+        }
+
+        function showProfileView(userData) {
+            profileName.textContent = userData.name;
+            profileMobile.textContent = userData.mobile;
+            profileLineId.textContent = userData.lineUserId;
+            
+            profileView.classList.remove('hidden');
+            // Example of a profile page in a mobile app. <- This line was causing the error
+            registrationView.classList.add('hidden');
+            errorView.classList.add('hidden');
+            hideLoader();
+        }
+
+        // --- Event Listeners ---
+        registrationForm.addEventListener('submit', handleRegistration);
+        window.addEventListener('load', main);
+
+    </script>
+</body>
+</html>
+
